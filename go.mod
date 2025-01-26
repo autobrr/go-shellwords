@@ -1,3 +1,3 @@
-module github.com/mattn/go-shellwords
+module github.com/autobrr/go-shellwords
 
-go 1.13
+go 1.23.2
