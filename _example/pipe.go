@@ -1,3 +1,4 @@
+//go:build ignore
 // +build ignore
 
 package main
@@ -6,7 +7,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/mattn/go-shellwords"
+	"github.com/autobrr/go-shellwords"
 )
 
 func isSpace(r byte) bool {
