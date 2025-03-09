@@ -288,7 +288,7 @@ func TestHaveMore(t *testing.T) {
 	line := "echo 🍺; seq 1 10"
 	args, err := parser.Parse(line)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	expected := []string{"echo", "🍺"}
 	if !reflect.DeepEqual(args, expected) {
@@ -302,7 +302,7 @@ func TestHaveMore(t *testing.T) {
 	line = string([]rune(line)[parser.Position+1:])
 	args, err = parser.Parse(line)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	expected = []string{"seq", "1", "10"}
 	if !reflect.DeepEqual(args, expected) {
@@ -321,7 +321,7 @@ func TestHaveRedirect(t *testing.T) {
 	line := "ls -la 2>foo"
 	args, err := parser.Parse(line)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err.Error())
 	}
 	expected := []string{"ls", "-la"}
 	if !reflect.DeepEqual(args, expected) {
