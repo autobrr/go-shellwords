@@ -19,6 +19,14 @@ func replaceEnv(getenv func(string) string, s string) string {
 	rs := []rune(s)
 	for i := 0; i < len(rs); i++ {
 		r := rs[i]
+
+		// Handle explicitly escaped dollar signs (\$) passed from parser
+		if r == '\\' && i+1 < len(rs) && rs[i+1] == '$' {
+			buf.WriteRune('$') // Write the literal '$'
+			i++                // Skip the '$' rune
+			continue
+		}
+
 		if r == '$' {
 			i++
 			if i == len(rs) {
