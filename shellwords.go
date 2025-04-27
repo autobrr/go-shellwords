@@ -2,7 +2,6 @@ package shellwords
 
 import (
 	"errors"
-	"runtime" // Added import
 	"strings"
 )
 
@@ -50,7 +49,7 @@ const (
 func (p *Parser) Parse(line string) ([]string, error) {
 	args := []string{}
 	buf := ""
-	var escaped, doubleQuoted, singleQuoted, backQuote, dollarQuote bool
+	var escaped, doubleQuoted, singleQuoted, backQuote, dollarQuote, wasSingleQuoted bool // Add wasSingleQuoted
 	backtick := ""
 
 	pos := -1
@@ -80,20 +79,8 @@ loop:
 				buf += string(r)
 			} else {
 				// Outside single quotes:
-				// Windows: '\' only escapes the *next* character if it's a double quote '"'. Otherwise, it's literal.
-				// POSIX: '\' always escapes the next character.
-				isWindows := runtime.GOOS == "windows" // Check OS (import "runtime")
-				if isWindows {
-					// Look ahead: Check if next char exists and is '"'
-					if i+1 < len(line) && line[i+1] == '"' {
-						escaped = true // Treat '\' as escape for the upcoming '"'
-					} else {
-						buf += string(r) // Treat '\' as literal
-					}
-				} else {
-					// POSIX behavior: always escape the next character
-					escaped = true
-				}
+				// Apply POSIX-like escape behavior universally outside single quotes
+				escaped = true
 			}
 			continue
 		}
@@ -124,6 +111,7 @@ loop:
 				}
 				buf = ""
 				got = argNo
+				wasSingleQuoted = false // Reset flag when arg finishes
 			}
 			continue
 		}
@@ -183,7 +171,12 @@ loop:
 			}
 		case '\'':
 			if !doubleQuoted && !dollarQuote {
+				if !singleQuoted {
+					// Entering single quotes
+					wasSingleQuoted = true // Mark this argument as having been single-quoted
+				}
 				if singleQuoted {
+					// Leaving single quotes
 					got = argQuoted
 				}
 				singleQuoted = !singleQuoted
@@ -211,18 +204,24 @@ loop:
 
 	// Process the last argument (original logic restored)
 	if got != argNo {
-		if p.ParseEnv {
-			if got == argSingle {
+		// Only perform environment replacement if ParseEnv is true AND the argument wasn't single-quoted
+		if p.ParseEnv && !wasSingleQuoted {
+			// Note: 'got' might be argSingle (unquoted) or argQuoted (double-quoted) here.
+			// If it was single-quoted, wasSingleQuoted would be true.
+			// We need to handle both cases where expansion should happen.
+			// The original logic correctly re-parses argSingle results and directly uses argQuoted results after replaceEnv.
+			if got == argSingle { // Includes unquoted strings that might need re-parsing after expansion
 				parser := &Parser{ParseEnv: false, ParseBacktick: false, Position: 0, Dir: p.Dir, Getenv: p.Getenv}
-				strs, err := parser.Parse(replaceEnv(p.Getenv, buf))
+				strs, err := parser.Parse(replaceEnv(p.Getenv, buf)) // replaceEnv is safe here as it wasn't single quoted
 				if err != nil {
 					return nil, err
 				}
 				args = append(args, strs...)
-			} else {
+			} else { // argQuoted (must have been double-quoted if wasSingleQuoted is false)
+				// Directly append the result of replaceEnv for originally double-quoted strings
 				args = append(args, replaceEnv(p.Getenv, buf))
 			}
-		} else {
+		} else { // Append raw buffer if ParseEnv is false OR it was single-quoted
 			args = append(args, buf)
 		}
 	}

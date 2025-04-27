@@ -17,7 +17,8 @@ func TestEscaping(t *testing.T) {
 		expected []string
 	}{
 		{"foo bar\\  ", []string{`foo`, `bar\`}},
-		{`\\uncpath foo`, []string{`\\uncpath`, `foo`}},
+		// Expect POSIX-style escaping: \\ becomes \
+		{`\\uncpath foo`, []string{`\uncpath`, `foo`}},
 		{`upx c:\github.com\jftuga\test\test.exe`, []string{`upx`, `c:\github.com\jftuga\test\test.exe`}},
 	}
 
