@@ -2,7 +2,7 @@ package shellwords
 
 import (
 	"errors"
-	"runtime"
+	"runtime" // Added import
 	"strings"
 )
 
@@ -28,10 +28,6 @@ type Parser struct {
 	// If ParseEnv is true, use this for getenv.
 	// If nil, use os.Getenv.
 	Getenv func(string) string
-
-	// Internal flag to indicate if this is a recursive parse call
-	// used after environment variable expansion on Windows.
-	IsInnerParse bool
 }
 
 func NewParser() *Parser {
@@ -77,61 +73,54 @@ loop:
 			continue
 		}
 
-		// Determine if the current rune should be treated as an escape character.
-		// On Windows, during an inner parse (after env var expansion), treat backslash literally.
-		isPlatformEscapeChar := isEscapeRune(r)
-		treatAsEscape := isPlatformEscapeChar && !(p.IsInnerParse && runtime.GOOS == "windows")
-
-		if treatAsEscape {
-			if singleQuoted { // Inside single quotes, escape char is literal (except for '\'')
+		// Original escape handling logic restored, with Windows modification
+		if isEscapeRune(r) { // Check if the rune is the platform's escape character
+			if singleQuoted {
+				// Inside single quotes, the escape character is literal
 				buf += string(r)
 			} else {
-				escaped = true // Mark the next character as escaped
+				// Outside single quotes:
+				// Windows: '\' only escapes the *next* character if it's a double quote '"'. Otherwise, it's literal.
+				// POSIX: '\' always escapes the next character.
+				isWindows := runtime.GOOS == "windows" // Check OS (import "runtime")
+				if isWindows {
+					// Look ahead: Check if next char exists and is '"'
+					if i+1 < len(line) && line[i+1] == '"' {
+						escaped = true // Treat '\' as escape for the upcoming '"'
+					} else {
+						buf += string(r) // Treat '\' as literal
+					}
+				} else {
+					// POSIX behavior: always escape the next character
+					escaped = true
+				}
 			}
 			continue
 		}
 
-		// If it's not an escape char (or we're treating it literally), handle spaces etc.
+		// If it wasn't the escape rune, handle spaces etc.
 		if isSpace(r) {
 			if singleQuoted || doubleQuoted || backQuote || dollarQuote {
 				buf += string(r)
 				backtick += string(r)
 			} else if got != argNo {
-				// Argument finished. Process it.
-				argToAppend := buf
+				// Argument finished. Process it (original logic restored).
 				if p.ParseEnv {
-					// Apply environment variable expansion *before* potential inner parse
-					expandedArg := replaceEnv(p.Getenv, buf)
 					if got == argSingle {
-						// If the original arg was unquoted, and env expansion happened,
-						// we need to re-parse the result in case expansion introduced spaces,
-						// but treat backslashes literally during this inner parse on Windows.
-						parser := &Parser{
-							ParseEnv:      false, // Don't re-expand env vars
-							ParseBacktick: false, // Don't run backticks
-							Position:      0,
-							Dir:           p.Dir,
-							Getenv:        p.Getenv, // Pass original Getenv
-							IsInnerParse:  true,     // Mark as inner parse
-						}
-						strs, err := parser.Parse(expandedArg)
+						// Re-parse unquoted args after expansion (original logic)
+						parser := &Parser{ParseEnv: false, ParseBacktick: false, Position: 0, Dir: p.Dir, Getenv: p.Getenv}
+						strs, err := parser.Parse(replaceEnv(p.Getenv, buf))
 						if err != nil {
-							return nil, err // Propagate error from inner parse
+							return nil, err
 						}
-						// Append the results of the inner parse
 						args = append(args, strs...)
-						// Reset buf and got, skip appending the original/expanded arg below
-						buf = ""
-						got = argNo
-						continue // Skip the final append for this case
 					} else {
-						// If the original arg was quoted, use the expanded result directly
-						argToAppend = expandedArg
+						// Append quoted args after expansion
+						args = append(args, replaceEnv(p.Getenv, buf))
 					}
-				}
-				// Append the final argument (original, or expanded if quoted)
-				if got != argNo { // Check got again as inner parse might have reset it
-					args = append(args, argToAppend)
+				} else {
+					// Append arg without expansion
+					args = append(args, buf)
 				}
 				buf = ""
 				got = argNo
@@ -220,10 +209,11 @@ loop:
 		}
 	}
 
+	// Process the last argument (original logic restored)
 	if got != argNo {
 		if p.ParseEnv {
 			if got == argSingle {
-				parser := &Parser{ParseEnv: false, ParseBacktick: false, Position: 0, Dir: p.Dir}
+				parser := &Parser{ParseEnv: false, ParseBacktick: false, Position: 0, Dir: p.Dir, Getenv: p.Getenv}
 				strs, err := parser.Parse(replaceEnv(p.Getenv, buf))
 				if err != nil {
 					return nil, err
