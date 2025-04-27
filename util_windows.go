@@ -30,6 +30,5 @@ func shellRun(line, dir string) (string, error) {
 }
 
 func isEscapeRune(r rune) bool {
-	// TODO: Implement escaping (via `) on Windows
-	return false
+	return r == '\\'
 }
