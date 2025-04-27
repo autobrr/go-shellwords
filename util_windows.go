@@ -30,5 +30,5 @@ func shellRun(line, dir string) (string, error) {
 }
 
 func isEscapeRune(r rune) bool {
-	return false
+	return r == '\\'
 }
