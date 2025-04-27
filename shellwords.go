@@ -1,11 +1,8 @@
 package shellwords
 
 import (
-	"bytes"
 	"errors"
-	"os"
 	"strings"
-	"unicode"
 )
 
 var (
@@ -19,79 +16,6 @@ func isSpace(r rune) bool {
 		return true
 	}
 	return false
-}
-
-func replaceEnv(getenv func(string) string, s string) string {
-	if getenv == nil {
-		getenv = os.Getenv
-	}
-
-	var buf bytes.Buffer
-	rs := []rune(s)
-	for i := 0; i < len(rs); i++ {
-		r := rs[i]
-		if r == '\\' {
-			i++
-			if i == len(rs) {
-				break
-			}
-			buf.WriteRune(rs[i])
-			continue
-		} else if r == '$' {
-			i++
-			if i == len(rs) {
-				buf.WriteRune(r)
-				break
-			}
-			if rs[i] == 0x7b {
-				i++
-				p := i
-				for ; i < len(rs); i++ {
-					r = rs[i]
-					if r == '\\' {
-						i++
-						if i == len(rs) {
-							return s
-						}
-						continue
-					}
-					if r == 0x7d || (!unicode.IsLetter(r) && r != '_' && !unicode.IsDigit(r)) {
-						break
-					}
-				}
-				if r != 0x7d {
-					return s
-				}
-				if i > p {
-					buf.WriteString(getenv(s[p:i]))
-				}
-			} else {
-				p := i
-				for ; i < len(rs); i++ {
-					r := rs[i]
-					if r == '\\' {
-						i++
-						if i == len(rs) {
-							return s
-						}
-						continue
-					}
-					if !unicode.IsLetter(r) && r != '_' && !unicode.IsDigit(r) {
-						break
-					}
-				}
-				if i > p {
-					buf.WriteString(getenv(s[p:i]))
-					i--
-				} else {
-					buf.WriteString(s[p:])
-				}
-			}
-		} else {
-			buf.WriteRune(r)
-		}
-	}
-	return buf.String()
 }
 
 type Parser struct {
