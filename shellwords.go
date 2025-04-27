@@ -61,6 +61,12 @@ loop:
 	for _, r := range line {
 		i++
 		if escaped {
+			// When escaped is true because of '\\' on Windows, add the backslash.
+			if runtime.GOOS == "windows" && r == '\\' {
+				buf += "\\" // Add the literal backslash that was escaped
+			}
+			// Original logic to add the escaped character (e.g., '"' or the second '\' from '\\')
+			// Also handle \t and \n conversion (should only happen on POSIX?) - Let's refine later if needed.
 			if r == 't' {
 				r = '\t'
 			}
@@ -69,7 +75,7 @@ loop:
 			}
 			buf += string(r)
 			escaped = false
-			got = argSingle
+			got = argSingle // Restore setting got, needed for cases like `foo \& bar`
 			continue
 		}
 
@@ -88,7 +94,12 @@ loop:
 						if nextChar == '"' || nextChar == '\\' {
 							escaped = true // Escape the quote or backslash
 						} else {
-							buf += string(r) // Treat '\' as literal
+							// Treat '\' as literal if not escaping '"' or '\'
+							buf += string(r)
+							// Need to mark that we added something if buf was empty
+							if got == argNo {
+								got = argSingle
+							}
 						}
 					} else {
 						// Trailing backslash is literal on Windows
