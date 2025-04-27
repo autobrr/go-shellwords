@@ -19,16 +19,7 @@ func replaceEnv(getenv func(string) string, s string) string {
 	rs := []rune(s)
 	for i := 0; i < len(rs); i++ {
 		r := rs[i]
-		// Revert to POSIX-like escape handling for backslash
-		if r == '\\' {
-			i++
-			if i == len(rs) {
-				buf.WriteRune('\\') // Keep trailing backslash
-				break
-			}
-			buf.WriteRune(rs[i]) // Write the escaped character
-			continue
-		} else if r == '$' {
+		if r == '$' {
 			i++
 			if i == len(rs) {
 				buf.WriteRune(r)
