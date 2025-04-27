@@ -19,9 +19,14 @@ func replaceEnv(getenv func(string) string, s string) string {
 	rs := []rune(s)
 	for i := 0; i < len(rs); i++ {
 		r := rs[i]
-		// On Windows, backslash is literal in this context (post-parsing)
+		// Revert to POSIX-like escape handling for backslash
 		if r == '\\' {
-			buf.WriteRune(r) // Append the backslash itself
+			i++
+			if i == len(rs) {
+				buf.WriteRune('\\') // Keep trailing backslash
+				break
+			}
+			buf.WriteRune(rs[i]) // Write the escaped character
 			continue
 		} else if r == '$' {
 			i++
@@ -41,24 +46,19 @@ func replaceEnv(getenv func(string) string, s string) string {
 					}
 				}
 				if i == p || (i < len(rs) && rs[i] != '}') { // Check if variable name is empty or closing brace is missing
-					// Malformed variable expansion, treat '$' literally
+					// Malformed: empty or no closing brace
 					buf.WriteRune('$')
-					if rs[i-1] == '{' { // If it was ${
-						buf.WriteRune('{')
-					}
-					// Reset i to process characters after '$' or '${'
-					i = p - 1
-					if rs[i] == '{' {
-						i-- // Adjust if it was ${
-					}
+					buf.WriteRune('{')
+					i = p - 1 // Reprocess chars after ${
 				} else {
+					// Need to handle escapes *within* the variable name before getenv?
+					// Current logic passes raw name including potential escapes.
 					buf.WriteString(getenv(string(rs[p:i])))
-					if i < len(rs) && rs[i] != '}' { // If loop broke on non-brace char
-						i-- // Re-process the breaking character
+					if i < len(rs) && rs[i] != '}' {
+						i-- // Reprocess breaking char
 					}
 				}
-
-			} else { // Simple $VAR form
+			} else { // Simple $VAR
 				p := i
 				for ; i < len(rs); i++ {
 					r = rs[i]
@@ -68,11 +68,10 @@ func replaceEnv(getenv func(string) string, s string) string {
 				}
 				if i > p {
 					buf.WriteString(getenv(string(rs[p:i])))
-					i-- // Re-process the character that ended the variable name
+					i-- // Reprocess ending char
 				} else {
-					// Just a '$' followed by non-variable character, treat '$' literally
-					buf.WriteRune('$')
-					i-- // Re-process the character after '$'
+					buf.WriteRune('$') // Treat '$' literally
+					i--                // Reprocess char after '$'
 				}
 			}
 		} else {
