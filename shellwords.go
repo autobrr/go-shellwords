@@ -2,6 +2,7 @@ package shellwords
 
 import (
 	"errors"
+	"runtime"
 	"strings"
 )
 
@@ -78,9 +79,25 @@ loop:
 				// Inside single quotes, the escape character is literal
 				buf += string(r)
 			} else {
-				// Outside single quotes:
-				// Apply POSIX-like escape behavior universally outside single quotes
-				escaped = true
+				// Outside single quotes: Apply platform-specific escape logic
+				isWindows := runtime.GOOS == "windows"
+				if isWindows {
+					// Windows: '\' escapes only '"' and '\'. Otherwise, it's literal.
+					if i+1 < len(line) {
+						nextChar := rune(line[i+1])
+						if nextChar == '"' || nextChar == '\\' {
+							escaped = true // Escape the quote or backslash
+						} else {
+							buf += string(r) // Treat '\' as literal
+						}
+					} else {
+						// Trailing backslash is literal on Windows
+						buf += string(r)
+					}
+				} else {
+					// POSIX: '\' always escapes the next character
+					escaped = true
+				}
 			}
 			continue
 		}
