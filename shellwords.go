@@ -136,12 +136,6 @@ loop:
 	for _, r := range line {
 		i++
 		if escaped {
-			if r == 't' {
-				r = '\t'
-			}
-			if r == 'n' {
-				r = '\n'
-			}
 			buf += string(r)
 			escaped = false
 			got = argSingle
@@ -238,7 +232,7 @@ loop:
 		case '\'':
 			if !doubleQuoted && !dollarQuote {
 				if singleQuoted {
-					got = argQuoted
+					got = argSingle
 				}
 				singleQuoted = !singleQuoted
 				continue

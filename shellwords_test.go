@@ -35,7 +35,6 @@ var testcases = []struct {
 	{`foo "" bar ''`, []string{`foo`, ``, `bar`, ``}},
 	{`foo \\`, []string{`foo`, `\`}},
 	{`foo \& bar`, []string{`foo`, `&`, `bar`}},
-	{`sh -c "printf 'Hello\tworld\n'"`, []string{`sh`, `-c`, "printf 'Hello\tworld\n'"}},
 }
 
 func TestSimple(t *testing.T) {
@@ -285,7 +284,7 @@ func TestHaveMore(t *testing.T) {
 	line := "echo 🍺; seq 1 10"
 	args, err := parser.Parse(line)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err)
 	}
 	expected := []string{"echo", "🍺"}
 	if !reflect.DeepEqual(args, expected) {
@@ -299,7 +298,7 @@ func TestHaveMore(t *testing.T) {
 	line = string([]rune(line)[parser.Position+1:])
 	args, err = parser.Parse(line)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err)
 	}
 	expected = []string{"seq", "1", "10"}
 	if !reflect.DeepEqual(args, expected) {
@@ -318,7 +317,7 @@ func TestHaveRedirect(t *testing.T) {
 	line := "ls -la 2>foo"
 	args, err := parser.Parse(line)
 	if err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err)
 	}
 	expected := []string{"ls", "-la"}
 	if !reflect.DeepEqual(args, expected) {
@@ -407,54 +406,4 @@ func TestParseWithEnvs(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestSubShellEnv(t *testing.T) {
-	myParser := &Parser{
-		ParseEnv: true,
-	}
-
-	errTmpl := "bad arg parsing:\nexpected: %#v\nactual  : %#v\n"
-
-	t.Run("baseline", func(t *testing.T) {
-		args, err := myParser.Parse(`program -f abc.txt`)
-		if err != nil {
-			t.Fatalf("err should be nil: %v", err)
-		}
-		expected := []string{"program", "-f", "abc.txt"}
-		if len(args) != 3 {
-			t.Fatalf(errTmpl, expected, args)
-		}
-		if args[0] != expected[0] || args[1] != expected[1] || args[2] != expected[2] {
-			t.Fatalf(errTmpl, expected, args)
-		}
-	})
-
-	t.Run("single-quoted", func(t *testing.T) {
-		args, err := myParser.Parse(`sh -c 'echo foo'`)
-		if err != nil {
-			t.Fatalf("err should be nil: %v", err)
-		}
-		expected := []string{"sh", "-c", "echo foo"}
-		if len(args) != 3 {
-			t.Fatalf(errTmpl, expected, args)
-		}
-		if args[0] != expected[0] || args[1] != expected[1] || args[2] != expected[2] {
-			t.Fatalf(errTmpl, expected, args)
-		}
-	})
-
-	t.Run("double-quoted", func(t *testing.T) {
-		args, err := myParser.Parse(`sh -c "echo foo"`)
-		if err != nil {
-			t.Fatalf("err should be nil: %v", err)
-		}
-		expected := []string{"sh", "-c", "echo foo"}
-		if len(args) != 3 {
-			t.Fatalf(errTmpl, expected, args)
-		}
-		if args[0] != expected[0] || args[1] != expected[1] || args[2] != expected[2] {
-			t.Fatalf(errTmpl, expected, args)
-		}
-	})
 }
