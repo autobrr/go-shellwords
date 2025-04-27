@@ -1,9 +1,11 @@
 package shellwords
 
 import (
+	"bytes"
 	"errors"
-	"runtime"
+	"os"
 	"strings"
+	"unicode"
 )
 
 var (
@@ -17,6 +19,79 @@ func isSpace(r rune) bool {
 		return true
 	}
 	return false
+}
+
+func replaceEnv(getenv func(string) string, s string) string {
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+
+	var buf bytes.Buffer
+	rs := []rune(s)
+	for i := 0; i < len(rs); i++ {
+		r := rs[i]
+		if r == '\\' {
+			i++
+			if i == len(rs) {
+				break
+			}
+			buf.WriteRune(rs[i])
+			continue
+		} else if r == '$' {
+			i++
+			if i == len(rs) {
+				buf.WriteRune(r)
+				break
+			}
+			if rs[i] == 0x7b {
+				i++
+				p := i
+				for ; i < len(rs); i++ {
+					r = rs[i]
+					if r == '\\' {
+						i++
+						if i == len(rs) {
+							return s
+						}
+						continue
+					}
+					if r == 0x7d || (!unicode.IsLetter(r) && r != '_' && !unicode.IsDigit(r)) {
+						break
+					}
+				}
+				if r != 0x7d {
+					return s
+				}
+				if i > p {
+					buf.WriteString(getenv(s[p:i]))
+				}
+			} else {
+				p := i
+				for ; i < len(rs); i++ {
+					r := rs[i]
+					if r == '\\' {
+						i++
+						if i == len(rs) {
+							return s
+						}
+						continue
+					}
+					if !unicode.IsLetter(r) && r != '_' && !unicode.IsDigit(r) {
+						break
+					}
+				}
+				if i > p {
+					buf.WriteString(getenv(s[p:i]))
+					i--
+				} else {
+					buf.WriteString(s[p:])
+				}
+			}
+		} else {
+			buf.WriteRune(r)
+		}
+	}
+	return buf.String()
 }
 
 type Parser struct {
@@ -50,7 +125,7 @@ const (
 func (p *Parser) Parse(line string) ([]string, error) {
 	args := []string{}
 	buf := ""
-	var escaped, doubleQuoted, singleQuoted, backQuote, dollarQuote, wasSingleQuoted bool // Add wasSingleQuoted
+	var escaped, doubleQuoted, singleQuoted, backQuote, dollarQuote bool
 	backtick := ""
 
 	pos := -1
@@ -61,12 +136,6 @@ loop:
 	for _, r := range line {
 		i++
 		if escaped {
-			// When escaped is true because of '\\' on Windows, add the backslash.
-			if runtime.GOOS == "windows" && r == '\\' {
-				buf += "\\" // Add the literal backslash that was escaped
-			}
-			// Original logic to add the escaped character (e.g., '"' or the second '\' from '\\')
-			// Also handle \t and \n conversion (should only happen on POSIX?) - Let's refine later if needed.
 			if r == 't' {
 				r = '\t'
 			}
@@ -75,71 +144,40 @@ loop:
 			}
 			buf += string(r)
 			escaped = false
-			got = argSingle // Restore setting got, needed for cases like `foo \& bar`
+			got = argSingle
 			continue
 		}
 
-		// Original escape handling logic restored, with Windows modification
-		if isEscapeRune(r) { // Check if the rune is the platform's escape character
+		if isEscapeRune(r) {
 			if singleQuoted {
-				// Inside single quotes, the escape character is literal
 				buf += string(r)
 			} else {
-				// Outside single quotes: Apply platform-specific escape logic
-				isWindows := runtime.GOOS == "windows"
-				if isWindows {
-					// Windows: '\' escapes only '"' and '\'. Otherwise, it's literal.
-					if i+1 < len(line) {
-						nextChar := rune(line[i+1])
-						if nextChar == '"' || nextChar == '\\' {
-							escaped = true // Escape the quote or backslash
-						} else {
-							// Treat '\' as literal if not escaping '"' or '\'
-							buf += string(r)
-							// Need to mark that we added something if buf was empty
-							if got == argNo {
-								got = argSingle
-							}
-						}
-					} else {
-						// Trailing backslash is literal on Windows
-						buf += string(r)
-					}
-				} else {
-					// POSIX: '\' always escapes the next character
-					escaped = true
-				}
+				escaped = true
 			}
 			continue
 		}
 
-		// If it wasn't the escape rune, handle spaces etc.
 		if isSpace(r) {
 			if singleQuoted || doubleQuoted || backQuote || dollarQuote {
 				buf += string(r)
 				backtick += string(r)
 			} else if got != argNo {
-				// Argument finished. Process it (original logic restored).
 				if p.ParseEnv {
 					if got == argSingle {
-						// Re-parse unquoted args after expansion (original logic)
-						parser := &Parser{ParseEnv: false, ParseBacktick: false, Position: 0, Dir: p.Dir, Getenv: p.Getenv}
+						parser := &Parser{ParseEnv: false, ParseBacktick: false, Position: 0, Dir: p.Dir}
 						strs, err := parser.Parse(replaceEnv(p.Getenv, buf))
 						if err != nil {
 							return nil, err
 						}
 						args = append(args, strs...)
 					} else {
-						// Append quoted args after expansion
 						args = append(args, replaceEnv(p.Getenv, buf))
 					}
 				} else {
-					// Append arg without expansion
 					args = append(args, buf)
 				}
 				buf = ""
 				got = argNo
-				wasSingleQuoted = false // Reset flag when arg finishes
 			}
 			continue
 		}
@@ -199,12 +237,7 @@ loop:
 			}
 		case '\'':
 			if !doubleQuoted && !dollarQuote {
-				if !singleQuoted {
-					// Entering single quotes
-					wasSingleQuoted = true // Mark this argument as having been single-quoted
-				}
 				if singleQuoted {
-					// Leaving single quotes
 					got = argQuoted
 				}
 				singleQuoted = !singleQuoted
@@ -230,26 +263,19 @@ loop:
 		}
 	}
 
-	// Process the last argument (original logic restored)
 	if got != argNo {
-		// Only perform environment replacement if ParseEnv is true AND the argument wasn't single-quoted
-		if p.ParseEnv && !wasSingleQuoted {
-			// Note: 'got' might be argSingle (unquoted) or argQuoted (double-quoted) here.
-			// If it was single-quoted, wasSingleQuoted would be true.
-			// We need to handle both cases where expansion should happen.
-			// The original logic correctly re-parses argSingle results and directly uses argQuoted results after replaceEnv.
-			if got == argSingle { // Includes unquoted strings that might need re-parsing after expansion
-				parser := &Parser{ParseEnv: false, ParseBacktick: false, Position: 0, Dir: p.Dir, Getenv: p.Getenv}
-				strs, err := parser.Parse(replaceEnv(p.Getenv, buf)) // replaceEnv is safe here as it wasn't single quoted
+		if p.ParseEnv {
+			if got == argSingle {
+				parser := &Parser{ParseEnv: false, ParseBacktick: false, Position: 0, Dir: p.Dir}
+				strs, err := parser.Parse(replaceEnv(p.Getenv, buf))
 				if err != nil {
 					return nil, err
 				}
 				args = append(args, strs...)
-			} else { // argQuoted (must have been double-quoted if wasSingleQuoted is false)
-				// Directly append the result of replaceEnv for originally double-quoted strings
+			} else {
 				args = append(args, replaceEnv(p.Getenv, buf))
 			}
-		} else { // Append raw buffer if ParseEnv is false OR it was single-quoted
+		} else {
 			args = append(args, buf)
 		}
 	}

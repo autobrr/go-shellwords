@@ -17,7 +17,6 @@ func TestEscaping(t *testing.T) {
 		expected []string
 	}{
 		{"foo bar\\  ", []string{`foo`, `bar\`}},
-		// Revert expectation: Windows logic now escapes \, so \\\\ becomes \\
 		{`\\uncpath foo`, []string{`\\uncpath`, `foo`}},
 		{`upx c:\github.com\jftuga\test\test.exe`, []string{`upx`, `c:\github.com\jftuga\test\test.exe`}},
 	}

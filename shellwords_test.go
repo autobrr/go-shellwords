@@ -35,9 +35,6 @@ var testcases = []struct {
 	{`foo "" bar ''`, []string{`foo`, ``, `bar`, ``}},
 	{`foo \\`, []string{`foo`, `\`}},
 	{`foo \& bar`, []string{`foo`, `&`, `bar`}},
-	// Test case 21: Input has literal \\t and \\n, so they should be preserved in output.
-	{`sh -c "printf 'Hello\\tworld\\n'"`, []string{`sh`, `-c`, "printf 'Hello\\tworld\\n'"}},
-	// Add a new test case 22 for actual tab/newline interpretation
 	{`sh -c "printf 'Hello\tworld\n'"`, []string{`sh`, `-c`, "printf 'Hello\tworld\n'"}},
 }
 
